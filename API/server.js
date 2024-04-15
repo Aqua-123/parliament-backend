@@ -7,6 +7,7 @@ import multer from "multer";
 import TranslateTextAzure from "./src/Translate.js";
 import TextToSpeechAzure from "./src/TTS.js";
 import SpeechToText from "./src/ASR.js";
+import User from "./Modals/User.js";
 
 const TOTAL_CPUS = os.cpus().length;
 const DEBUG_MODE = true;
@@ -98,6 +99,66 @@ if (cluster.isPrimary) {
       return res.status(500).send("Server error");
     }
   });
+
+  app.post("/sign-up", async (req, res) => {
+    try {
+      const { email, name, constituency, sabha, mothertongue, password } =
+        req.body;
+
+      const user = new User({
+        email,
+        name,
+        constituency,
+        sabha,
+        mothertongue,
+        password,
+      });
+
+      await user.save();
+
+      const token = jwt.sign({ id: user._id }, "secretKey", {
+        expiresIn: "16",
+      });
+      res.status(201).json({ token, userType });
+    } catch (error) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  app.post("/sign-in", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      const user = await User.findOne({ email });
+      if (!user || !(await bcrypt.compare(password, user.password))) {
+        return res.status(401).send("Authentication failed");
+      }
+      const token = jwt.sign({ id: user._id }, "secretKey", {
+        expiresIn: "12h",
+      });
+      res.json({ token, user });
+    } catch (error) {
+      res.status(400).send(error.message);
+    }
+  });
+
+  // const verifyToken = (req, res, next) => {
+  //   if (DEBUG) {
+  //     req.user = { id: "testuser" };
+  //     return next();
+  //   }
+  //   let token = req.header("Authorization");
+  //   if (token.startsWith("Bearer ")) {
+  //     token = token.slice(7, token.length);
+  //   }
+  //   if (!token) return res.status(401).send("Access denied");
+  //   try {
+  //     const verified = jwt.verify(token, "secretKey");
+  //     req.user = verified;
+  //     next();
+  //   } catch (error) {
+  //     res.status(400).send("Invalid token");
+  //   }
+  // };
 
   app.listen(4000, () => {
     console.log(`Worker ${process.pid} started`);
